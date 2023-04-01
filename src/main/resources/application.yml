@@ -1,0 +1,49 @@
+management:
+  apikey: 123
+  securePath: /user
+  health:
+    circuitbreakers:
+      enabled: 'true'
+    ratelimiters:
+      enabled: 'true'
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+  endpoint:
+    health:
+      show-details: always
+spring:
+  application:
+    name: sys-kilo-user-rest
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      client-id: ${spring.application.name}
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  data:
+    cassandra:
+      local-datacenter: datacenter1
+      port: 9042
+      contact-points: localhost
+      keyspace-name: examplesys
+      #username: cassandra
+      #password: cassandra
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+logging:
+  file:
+    path: .
+    name: spring-boot.log
+  level:
+    org:
+      springframework:
+        web: DEBUG
+springdoc:
+  swagger-ui:
+    url: /v3/api-docs.yaml
+server:
+  port: ${PORT:8080}
