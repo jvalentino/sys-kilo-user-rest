@@ -93,6 +93,42 @@ class UserRestIntgTest extends BaseIntg {
         result.authUserId.toString() == 'b9ccf7dd-a1ef-4b86-9087-88a72e144aea'
     }
 
+    void "test /user/login fail"() {
+        given:
+        AuthUser user = new AuthUser()
+        user.with {
+            authUserId = UUID.fromString('b9ccf7dd-a1ef-4b86-9087-88a72e144aea')
+            firstName = 'alpha'
+            lastName = 'bravo'
+            salt = '$1$9DrjDNgl'
+            password = '$1$9DrjDNgl$Bdl2Dq3DKMRYwiGeJWdCj.'
+            email = 'charlie'
+        }
+
+        org.mockito.Mockito.when(authUserRepo.findAdminUser('charlie')).thenReturn([user])
+
+        and:
+        UserDto input = new UserDto()
+        input.with {
+            email = 'charlie'
+            password = 'bad'
+        }
+
+        when:
+        MvcResult response = mvc.perform(
+                post("/user/login")
+                        .header('X-Auth-Token', '123')
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(toJson(input)))
+                .andDo(print())
+                .andExpect(status().is(401))
+                .andReturn()
+
+        then:
+        true
+    }
+
     void "test /user/list"() {
         given:
         AuthUser user = new AuthUser()
