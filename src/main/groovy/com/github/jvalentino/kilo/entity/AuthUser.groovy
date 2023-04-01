@@ -24,6 +24,9 @@ class AuthUser {
     UUID authUserId
 
     @Column
+    String email
+
+    @Column
     @JsonIgnore
     String password
 
