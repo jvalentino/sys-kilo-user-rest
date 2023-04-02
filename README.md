@@ -1,6 +1,6 @@
-# System Kilo Doc Rest
+# System Kilo User Rest
 
-This application serves as the restful services as part of the overall https://github.com/jvalentino/sys-kilo project as they relate to documents. For system level details, please see that location.
+This application serves as the restful services as part of the overall https://github.com/jvalentino/sys-kilo project as they relate to users. For system level details, please see that location.
 
 Prerequisites
 
@@ -20,18 +20,24 @@ All of these you can get in one command using this installation automation (if y
 # Contents
 
 - [Summary](#summary)
-  * [Database](#database)
+  * [Infrastructure](#infrastructure)
   * [IDE Testing](#ide-testing)
   * [Runtime](#runtime)
   * [Verification](#verification)
   * [Strategy](#strategy)
   * [Build](#build)
+  * [Deploy](#deploy)
 - [Dev](#dev)
+  * [Runtime Validation](#runtime-validation)
+    + [Swagger UI](#swagger-ui)
+    + [/user/count](#usercount)
+    + [/user/list](#userlist)
+    + [/user/login](#userlogin)
+    + [/user/new](#usernew)
   * [Prometheus](#prometheus)
     + [build.gradle](#buildgradle)
     + [application.properties](#applicationproperties)
     + [SpringWebConfig](#springwebconfig)
-    + [WebSecurityConfig](#websecurityconfig)
   * [Docker](#docker)
     + [build-docker.sh](#build-dockersh)
     + [Dockerfile](#dockerfile)
@@ -39,7 +45,6 @@ All of these you can get in one command using this installation automation (if y
     + [start.sh](#startsh)
   * [OpenAPI](#openapi)
     + [build.gradle](#buildgradle-1)
-    + [SpringWebConfig](#springwebconfig-1)
     + [application.properties](#applicationproperties-1)
     + [UI](#ui)
   * [Resilience4j](#resilience4j)
@@ -51,6 +56,19 @@ All of these you can get in one command using this installation automation (if y
     + [SwaggerConfiguration](#swaggerconfiguration)
     + [SecurityFilter](#securityfilter)
     + [application.properties](#applicationproperties-2)
+  * [Cassandra](#cassandra)
+    + [build.gradle](#buildgradle-3)
+    + [CassandraConfig](#cassandraconfig)
+    + [application.yml](#applicationyml-1)
+    + [Table Mappings](#table-mappings)
+    + [Repository Mappings](#repository-mappings)
+    + [BaseIntg](#baseintg)
+    + [DbViz](#dbviz)
+  * [Kafka](#kafka)
+    + [build.gradle](#buildgradle-4)
+    + [application.yml](#applicationyml-2)
+    + [UserProducer](#userproducer)
+    + [Kafka IDE](#kafka-ide)
 
 # Summary
 
@@ -70,7 +88,16 @@ You then have to create the Kafka topic:
 ./create-topics.sh
 ```
 
+Since I could not get liquidbase to work with Cassandra, you are also dependent on the https://github.com/jvalentino/sys-kilo-user-nosql project to handle populating the database. Specifically using:
 
+```
+./update-db.sh
+```
+
+This will create an `auth_user` table and also populate it with the default user of:
+
+- Username: admin
+- Password: `37e098f0-b78d-4a48-adf1-e6c2568d4ea1`
 
 ## IDE Testing
 
@@ -141,7 +168,7 @@ It is then recommended you run thus application on port 8080, which can be done 
 **Command-Line**
 
 ```bash
-java -jar --server.port=8080 build/libs/sys-kilo-doc-rest-0.0.1.jar
+java -jar --server.port=8080 build/libs/sys-kilo-user-rest-0.0.1.jar
 ```
 
 ### Swagger UI
@@ -156,41 +183,33 @@ You are then going to want to set the authorization code to `123`, otherwise acc
 
 ![01](wiki/xauth.png)
 
-### /doc/versions/{docId}
+### /user/count
 
-Used for listing the versions of a specific document.
+![01](wiki/swagger-1.png)
+
+This returns the current number of users on the database.
+
+### /user/list
 
 ![01](wiki/swagger-2.png)
 
-### /doc/version/download/{docVersionId}
+This service lists all the current users of the given IDs, without their credentials.
 
-Used for downloading a specific document version.
+### /user/login
 
 ![01](wiki/swagger-3.png)
 
-### /doc/all
-
-User for listing al documents.
+This is how an account is validation by email and password. If invalid credentials are given, a 401 is returned.
 
 ![01](wiki/swagger-4.png)
 
-### /doc/upload/user/{userId}
-
-Used for uploading a new document, where that given document becomes the first version of it. The input is a file name and then a byte array: src/test/resources/doc-dto.json
+### /user/new
 
 ![01](wiki/swagger-5.png)
 
-### /doc/version/new/{docId}/user/{userId}
+This is how a new account is created within the domain, in which this application encodes the password using a random salt, generated a UUID, and then dispatches a Kafka event:
 
-This uploads a new version to an existing document. The input is a file name and then a byte array: src/test/resources/doc-dto.json
-
-![01](wiki/swagger-6.png)
-
-### /doc/populate
-
-Due to the actual data population happening in a different application entirely, I added this endpoint to automatically populate the database with a document and two versions:
-
-![01](wiki/swagger-7.png)
+![01](wiki/kafka-2.png)
 
 
 
@@ -246,9 +265,9 @@ This script consists of the following:
 ```bash
 #!/bin/bash
 
-NAME=sys-kilo-doc-rest
+NAME=sys-kilo-user-rest
 VERSION=latest
-HELM_NAME=sys-doc-rest
+HELM_NAME=sys-user-rest
 
 helm delete $HELM_NAME || true
 minikube image rm $NAME:$VERSION
@@ -269,7 +288,7 @@ The container for running this application consists of two parts:
 ```docker
 FROM openjdk:11
 WORKDIR .
-COPY build/libs/sys-kilo-doc-rest-0.0.1.jar /usr/local/sys-kilo-doc-rest-0.0.1.jar
+COPY build/libs/sys-kilo-user-rest-0.0.1.jar /usr/local/sys-kilo-user-rest-0.0.1.jar
 EXPOSE 8080
 COPY config/docker/start.sh /usr/local/start.sh
 
@@ -294,7 +313,7 @@ ENTRYPOINT ["/usr/local/start.sh"]
     Match *
     Host elasticsearch-master
     Port 9200
-    Index sys-doc-rest
+    Index sys-user-rest
     Suppress_Type_Name On
 ```
 
@@ -315,7 +334,7 @@ java -jar \
 	-Dspring.data.cassandra.password=cassandra \
 	-Dspring.data.cassandra.username=cassandra \
 	-Dspring.kafka.bootstrap-servers=kafka-service:9094 \
-	sys-kilo-doc-rest-0.0.1.jar
+	sys-kilo-user-rest-0.0.1.jar
 ```
 
 ## OpenAPI
@@ -647,10 +666,10 @@ Next we have to add an interceptor that gets called prior to every request.
 ```yaml
 spring:
   application:
-    name: sys-juliet-rest-doc
+    name: sys-kilo-user-rest
 management:
   apikey: 123
-  securePath: /doc
+  securePath: /user
 ```
 
 The involved properties were put in the application.properties, so that we can also change them at runtime from a deployment perspective.
@@ -773,17 +792,17 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
 ```
 
-### DocProducer
+### UserProducer
 
 ```groovy
 @Component
-class DocProducer {
+class UserProducer {
 
     @Autowired
     KafkaTemplate<String, String> kafkaTemplate
 
-    void produce(DocDto doc) {
-        kafkaTemplate.send('doc', doc.docId, toJson(doc))
+    void produce(UserDto user) {
+        kafkaTemplate.send('user', doc.uuid, toJson(user))
     }
 
     String toJson(Object obj) {
@@ -799,7 +818,7 @@ This just injects the KafkaTemplate into a reusable components, that turns an ob
 
 This is useful for seeing what is in Kafka.
 
-![01](wiki/kafka-1.png)
+![01](wiki/kafka-2.png)
 
 
 
